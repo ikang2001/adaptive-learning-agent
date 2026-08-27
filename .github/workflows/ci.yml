@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: learning_agent
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d learning_agent"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 16380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:55432/learning_agent
+      REDIS_URL: redis://localhost:16380/0
+      JWT_SECRET: test-jwt-secret-at-least-32-characters
+      OTP_HMAC_SECRET: test-otp-secret-at-least-32-characters
+      PII_HMAC_SECRET: test-pii-secret-at-least-32-characters
+      SMS_PROVIDER: fixed
+      FIXED_SMS_CODE: "246810"
+      USE_FAKE_MODEL: "true"
+      RUN_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen --dev
+      - run: uv run alembic upgrade head
+      - run: uv run learning-agent seed-demo
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy app
+      - run: uv run pytest --disable-warnings
+      - run: uv run python scripts/run_benchmark.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2

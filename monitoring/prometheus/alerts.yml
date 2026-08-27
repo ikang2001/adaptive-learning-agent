@@ -1,0 +1,25 @@
+groups:
+  - name: learning-agent-api
+    rules:
+      - alert: LearningAgentHighErrorRate
+        expr: >-
+          sum(rate(learning_agent_http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(learning_agent_http_requests_total[5m])), 0.001)
+          > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: API 5xx rate is above 1%
+      - alert: LearningAgentHighP95Latency
+        expr: >-
+          histogram_quantile(0.95,
+          sum(rate(learning_agent_http_request_duration_seconds_bucket[5m])) by (le))
+          > 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Non-model API P95 latency is above 300ms
+

@@ -1,0 +1,23 @@
+[
+  {"id":"A01","reasons":["TIME_OVERRUN"],"expected":"MINOR_ADJUST"},
+  {"id":"A02","reasons":["LOW_COMPLETION"],"expected":"MINOR_ADJUST"},
+  {"id":"A03","reasons":["TIME_OVERRUN","LOW_COMPLETION"],"expected":"MINOR_ADJUST"},
+  {"id":"A04","reasons":["LOW_ACCURACY"],"expected":"MAJOR_REPLAN"},
+  {"id":"A05","reasons":["REPEATED_ERROR"],"expected":"MAJOR_REPLAN"},
+  {"id":"A06","reasons":["LOW_ACCURACY","TIME_OVERRUN"],"expected":"MAJOR_REPLAN"},
+  {"id":"A07","reasons":["REPEATED_ERROR","LOW_COMPLETION"],"expected":"MAJOR_REPLAN"},
+  {"id":"A08","reasons":["LOW_ACCURACY","REPEATED_ERROR"],"expected":"MAJOR_REPLAN"},
+  {"id":"A09","reasons":["TIME_OVERRUN"],"expected":"MINOR_ADJUST"},
+  {"id":"A10","reasons":["LOW_COMPLETION"],"expected":"MINOR_ADJUST"},
+  {"id":"A11","reasons":["REPEATED_ERROR"],"expected":"MAJOR_REPLAN"},
+  {"id":"A12","reasons":["LOW_ACCURACY"],"expected":"MAJOR_REPLAN"},
+  {"id":"A13","reasons":["TIME_OVERRUN","LOW_COMPLETION"],"expected":"MINOR_ADJUST"},
+  {"id":"A14","reasons":["REPEATED_ERROR","TIME_OVERRUN"],"expected":"MAJOR_REPLAN"},
+  {"id":"A15","reasons":["LOW_ACCURACY","LOW_COMPLETION"],"expected":"MAJOR_REPLAN"},
+  {"id":"A16","reasons":["TIME_OVERRUN"],"expected":"MINOR_ADJUST"},
+  {"id":"A17","reasons":["LOW_COMPLETION"],"expected":"MINOR_ADJUST"},
+  {"id":"A18","reasons":["REPEATED_ERROR"],"expected":"MAJOR_REPLAN"},
+  {"id":"A19","reasons":["LOW_ACCURACY"],"expected":"MAJOR_REPLAN"},
+  {"id":"A20","reasons":["LOW_ACCURACY","REPEATED_ERROR","TIME_OVERRUN"],"expected":"MAJOR_REPLAN"}
+]
+
