@@ -1,0 +1,103 @@
+name: adaptive-learning-agent
+
+x-app: &app
+  image: adaptive-learning-agent:local
+  build: .
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/learning_agent
+    REDIS_URL: redis://redis:6379/0
+    RESOURCE_STORAGE_ROOT: /data/resources
+  volumes:
+    - ${DATA_ROOT:-D:/CodexTemp/qianrenqianan/docker}/resources:/data/resources
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  frontend:
+    image: adaptive-learning-agent-web:local
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+    ports:
+      - "18002:80"
+
+  api:
+    <<: *app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    ports:
+      - "18001:8000"
+
+  worker:
+    <<: *app
+    command: ["arq", "app.workers.settings.WorkerSettings"]
+    deploy:
+      replicas: 4
+
+  dispatcher:
+    <<: *app
+    command: ["python", "-m", "app.workers.dispatcher"]
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: learning_agent
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ${DATA_ROOT:-D:/CodexTemp/qianrenqianan/docker}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d learning_agent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "55432:5432"
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - ${DATA_ROOT:-D:/CodexTemp/qianrenqianan/docker}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "16380:6379"
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ${DATA_ROOT:-D:/CodexTemp/qianrenqianan/docker}/grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.132.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4318:4318"

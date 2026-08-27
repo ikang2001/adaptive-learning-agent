@@ -1,0 +1,87 @@
+[project]
+name = "adaptive-learning-agent"
+version = "0.1.0"
+description = "自动控制原理千人千案 Agent Harness 后端"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.14,<2",
+    "arq>=0.26,<1",
+    "asyncpg>=0.30,<1",
+    "cryptography>=44,<47",
+    "fastapi>=0.115,<1",
+    "httpx>=0.28,<1",
+    "filetype>=1.2,<2",
+    "markdown-it-py>=4,<5",
+    "opentelemetry-api>=1.33,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.33,<2",
+    "opentelemetry-instrumentation-fastapi>=0.54b0,<1",
+    "opentelemetry-instrumentation-sqlalchemy>=0.54b0,<1",
+    "opentelemetry-sdk>=1.33,<2",
+    "orjson>=3.10,<4",
+    "pillow>=12,<13",
+    "pgvector>=0.4,<1",
+    "phonenumbers>=9,<10",
+    "prometheus-client>=0.21,<1",
+    "pydantic-settings>=2.7,<3",
+    "pymupdf>=1.26,<2",
+    "pyjwt>=2.10,<3",
+    "python-docx>=1.2,<2",
+    "python-multipart>=0.0.20,<1",
+    "redis>=5.2,<7",
+    "sqlalchemy[asyncio]>=2.0.36,<3",
+    "structlog>=24.4,<26",
+    "uvicorn[standard]>=0.34,<1",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.124,<7",
+    "mypy>=1.14,<2",
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<1",
+    "pytest-cov>=6,<8",
+    "ruff>=0.9,<1",
+    "testcontainers[postgres,redis]>=4.9,<5",
+]
+
+[project.scripts]
+learning-agent = "app.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: requires PostgreSQL and Redis configured by .env",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "RUF"]
+allowed-confusables = ["：", "，", "；"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict = true
+exclude = ["alembic"]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

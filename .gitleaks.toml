@@ -1,0 +1,12 @@
+title = "adaptive-learning-agent secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Only documented placeholder values are allowed"
+paths = [
+  '''\.env\.example$''',
+  '''tests/''',
+]
+
