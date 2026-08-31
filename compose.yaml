@@ -30,7 +30,12 @@ services:
 
   api:
     <<: *app
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    command: ["python", "-m", "app.server"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/learning_agent
+      REDIS_URL: redis://redis:6379/0
+      RESOURCE_STORAGE_ROOT: /data/resources
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
     ports:
       - "18001:8000"
 
@@ -39,6 +44,8 @@ services:
     command: ["arq", "app.workers.settings.WorkerSettings"]
     deploy:
       replicas: 4
+    expose:
+      - "9101"
 
   dispatcher:
     <<: *app

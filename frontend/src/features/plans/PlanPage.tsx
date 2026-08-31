@@ -67,7 +67,7 @@ export function PlanPage() {
       for (let attempt = 0; attempt < 30; attempt += 1) {
         const state = await apiRequest<BackgroundJob>(`/jobs/${job.id}`)
         if (state.status === 'SUCCEEDED') return state
-        if (state.status === 'FAILED') throw new Error(state.error_code ?? '计划生成失败')
+        if (state.status === 'FAILED' || state.status === 'DEAD_LETTER') throw new Error(state.error_code ?? '计划生成失败')
         await new Promise((resolve) => window.setTimeout(resolve, 400))
       }
       throw new Error('计划生成超时，请稍后刷新')

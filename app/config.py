@@ -39,6 +39,27 @@ class Settings(BaseSettings):
     qwen_embedding_model: str = "qwen3.7-text-embedding"
     use_fake_model: bool = True
 
+    agent_max_steps: int = 8
+    agent_max_model_calls: int = 10
+    agent_max_tool_calls: int = 12
+    agent_max_input_tokens: int = 64_000
+    agent_max_output_tokens: int = 8_192
+    agent_max_total_tokens: int = 72_192
+    agent_max_runtime_seconds: int = 600
+    agent_max_repair_calls: int = 1
+    agent_model_max_output_tokens: int = 2_048
+    agent_lease_seconds: int = 45
+    agent_heartbeat_seconds: int = 10
+    agent_shadow_enabled: bool = False
+    agent_shadow_model: str | None = None
+    agent_shadow_prompt_version: str = "diagnosis_shadow_v1"
+    agent_tool_feature_flags: list[str] = Field(default_factory=list)
+
+    job_max_attempts: int = 3
+    job_retry_base_seconds: float = 1.0
+    job_retry_max_seconds: float = 60.0
+    job_reconciliation_seconds: int = 90
+
     resource_storage_root: str = "D:/CodexTemp/qianrenqianan/resources"
     resource_max_document_bytes: int = 100 * 1024 * 1024
     resource_max_image_bytes: int = 10 * 1024 * 1024
@@ -50,6 +71,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_safety(self) -> Settings:
+        if self.agent_heartbeat_seconds >= self.agent_lease_seconds:
+            raise ValueError("AGENT_HEARTBEAT_SECONDS must be less than AGENT_LEASE_SECONDS")
         if self.app_env != "production":
             return self
         if self.sms_provider in {"fixed", "unconfigured"}:

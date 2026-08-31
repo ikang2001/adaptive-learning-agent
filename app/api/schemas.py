@@ -102,6 +102,10 @@ class JobResponse(BaseModel):
     error_code: str | None
     created_at: datetime
     finished_at: datetime | None
+    attempt_count: int
+    max_attempts: int
+    next_retry_at: datetime | None
+    dead_lettered_at: datetime | None
 
 
 class PlanCreateRequest(BaseModel):
@@ -437,6 +441,9 @@ class ToolInvocationResponse(BaseModel):
     status: str
     latency_ms: int
     created_at: datetime
+    retry_count: int = 0
+    error_code: str | None = None
+    replayed: bool = False
 
 
 class ProposalResponse(BaseModel):
@@ -447,6 +454,12 @@ class ProposalResponse(BaseModel):
     reason_codes: list[str]
     confidence: float
     evidence_refs: list[str]
+    evidence_snapshot: list[dict[str, object]]
+    approval_expires_at: datetime | None = None
+    reviewer_user_id: uuid.UUID | None = None
+    review_reason: str | None = None
+    applied_at: datetime | None = None
+    apply_error_code: str | None = None
 
 
 class AgentRunResponse(BaseModel):
@@ -457,7 +470,11 @@ class AgentRunResponse(BaseModel):
     prompt_version: str
     policy_version: str
     loop_count: int
+    model_call_count: int
     tool_call_count: int
+    input_tokens: int
+    output_tokens: int
+    resumed_count: int
     termination_reason: str | None
     steps: list[AgentStepResponse]
     tools: list[ToolInvocationResponse]
@@ -467,6 +484,33 @@ class AgentRunResponse(BaseModel):
 class ProposalDecisionResponse(BaseModel):
     proposal: ProposalResponse
     job_id: uuid.UUID | None
+
+
+class ProposalDecisionRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class AgentCancelResponse(BaseModel):
+    id: uuid.UUID
+    status: str
+    cancel_requested_at: datetime | None
+
+
+class ShadowEvaluationResponse(BaseModel):
+    id: uuid.UUID
+    source_run_id: uuid.UUID
+    job_id: uuid.UUID | None
+    status: str
+    baseline_model: str
+    baseline_prompt_version: str
+    baseline_decision: str | None
+    baseline_confidence: float | None
+    candidate_model: str
+    candidate_prompt_version: str
+    candidate_decision: str | None
+    candidate_confidence: float | None
+    comparison: dict[str, object] | None
+    error_code: str | None
 
 
 class TrueExamResponse(BaseModel):

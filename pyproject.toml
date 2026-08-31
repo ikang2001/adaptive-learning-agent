@@ -1,6 +1,6 @@
 [project]
 name = "adaptive-learning-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "自动控制原理千人千案 Agent Harness 后端"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -66,7 +66,7 @@ markers = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-exclude = ["alembic/versions"]
+exclude = ["alembic/versions", "实施文档/11_企业级Agent_Harness完善方案.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC", "RUF"]

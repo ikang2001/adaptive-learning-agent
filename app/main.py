@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -9,7 +10,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, generate_latest, multiprocess
 from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -40,7 +41,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 register_error_handlers(app)
@@ -105,4 +106,10 @@ async def readiness() -> dict[str, str]:
 
 @app.get("/metrics", include_in_schema=False)
 async def metrics() -> Response:
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    if os.getenv("PROMETHEUS_MULTIPROC_DIR"):
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)  # type: ignore[no-untyped-call]
+        payload = generate_latest(registry)
+    else:
+        payload = generate_latest()
+    return Response(payload, media_type=CONTENT_TYPE_LATEST)

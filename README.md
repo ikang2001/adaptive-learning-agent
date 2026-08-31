@@ -1,10 +1,21 @@
 # 千人千案 Agent Harness
 
+[![CI](https://github.com/ikang2001/adaptive-learning-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ikang2001/adaptive-learning-agent/actions/workflows/ci.yml)
+
 面向考研专业课复习的智能学习计划与 Agent Harness 项目。当前演示学科为“自动控制原理”，系统围绕目标院校考纲，把课程学习、外部讲义练习、学习反馈、章节真题、专项强化和全真模拟串成可追踪的个人学习闭环。
 
 项目同时提供 FastAPI 后端与 React 体验前端。业务规则负责可确定的计算、状态和约束；Agent 只处理异常诊断、复杂调整建议和需要多工具组合的任务，不能绕过 Guardrail 直接修改核心业务数据。
 
-当前版本：`v0.1.0`（首个可体验版本）。
+当前版本：`v0.2.0`（企业级 Harness 与 Agent Evaluation 版本）。
+
+## 文档导航
+
+| 文档 | 内容 |
+|---|---|
+| [README.md](README.md) | 产品能力、架构、部署、API、开发与质量门禁 |
+| [测评.md](测评.md) | Evaluation 数据集、指标、运行阶段、Bad Case 与真实模型结果 |
+| [实施文档](实施文档/README.md) | 领域模型、知识库、规划、真题、Harness 与版本治理设计 |
+| [简历证据审计](benchmarks/RESUME_CLAIMS_AUDIT.md) | 项目能力和量化简历表述的证据边界 |
 
 ## 核心能力
 
@@ -28,12 +39,16 @@
 
 ### Agent Harness
 
-- 单 Agent 架构，具备模型路由、工具注册、策略保护、Checkpoint、Retry、Trace 和终止策略。
-- 默认最多 8 轮、12 次工具调用，单次模型读取超时 120 秒，Run 总时限 10 分钟。
-- 连续重复相同动作或两轮没有新增证据时，以 `LOOP_STALLED` 终止。
-- 读工具只对瞬时错误有限重试；写工具只有携带幂等键时才允许重试。
-- Flash 输出不合法或置信度低于 0.75 时最多升级一次 Plus；确定性规则走 Zero-Token 分支。
-- Worker 采用至少一次投递，通过数据库唯一约束、Run lease 和幂等记录避免重复提交。
+- 单 Agent 架构，具备模型路由、动态工具过滤、结构化策略保护、Checkpoint/Resume、Retry、Trace、Budget 和终止策略。
+- Checkpoint 保存明确的 `READY`、`TOOL_PENDING`、`FINAL_PENDING` 阶段；Worker 中断后从最近安全状态恢复，不重跑已经完成的模型步骤。
+- Run 使用 45 秒 Lease、10 秒 Heartbeat 和单调递增 Fencing Token；过期 Worker 不能写入 Checkpoint、Trace、Tool Ledger 或最终状态。
+- Tool 参数通过 Pydantic 在服务端二次校验；瞬时错误采用指数退避和 Jitter，副作用 Tool 必须携带稳定幂等键并写入执行 Ledger。
+- 模型输出必须是严格的 Tool Call 或 Final Decision，二者互斥；非法输出最多 Repair 一次，之后明确以 `STRUCTURED_OUTPUT_ERROR` 终止。
+- 默认最多 8 个 Step、10 次模型调用、12 次 Tool 调用、72,192 Tokens 和 10 分钟；重复动作、无新证据和 A/B 振荡会停止 Run。
+- Flash 支持低置信度升级和失败回退 Plus，并带轻量 Circuit Breaker；确定性规则继续走 Zero-Token 分支。
+- Job 支持 `RETRY_WAIT`、指数退避、Dead Letter 和过期任务 Reconciliation；Agent Run 支持协作式取消。
+- API 的 4 个 Uvicorn 进程使用 Prometheus multiprocess 汇总；每个 Worker 暴露内网 `:9101/metrics`，Prometheus 通过 Docker DNS 自动发现副本。
+- Agent 页面提供只读 Replay Debugger；Shadow Evaluation 默认关闭，仅管理员显式触发，且永远不执行 Proposal 副作用。
 
 ### 内容与审核
 
@@ -89,6 +104,7 @@ Agent 只在异常反馈、复杂诊断、重大计划调整或题库不足时�
 │  ├─ api/                 # FastAPI 路由、依赖与请求/响应 Schema
 │  ├─ application/         # 用例编排、学习计划、真题、组卷与审核服务
 │  ├─ domain/              # 不依赖框架的领域规则与算法
+│  ├─ evaluation/          # 数据生成、评测执行、指标与 Bad Case 闭环
 │  ├─ harness/             # Agent Runner、Guardrail、Trace、Checkpoint 等
 │  ├─ infrastructure/      # 数据库、Redis、短信、模型与工具 Adapter
 │  └─ workers/             # ARQ Worker 与 Outbox Dispatcher
@@ -98,6 +114,7 @@ Agent 只在异常反馈、复杂诊断、重大计划调整或题库不足时�
 ├─ benchmarks/             # Agent 固定轨迹 benchmark 数据
 ├─ scripts/                # 构建、压测、benchmark 与模型 smoke 脚本
 ├─ tests/                  # 单元测试与 PostgreSQL/Redis 集成测试
+├─ 测评.md                 # 中文评测手册与实测结果
 ├─ compose.yaml
 └─ pyproject.toml
 ```
@@ -240,31 +257,41 @@ uv run learning-agent grant-role --phone +8613800138000 --role ADMIN
 | 真题 | `/me/true-exams`、章节 Session、整卷提交、真题画像 |
 | 模拟卷 | `/me/mock-exams`、组卷任务查询、模考提交 |
 | 资源 | `/resources/uploads`、导入状态、资源审核与发布 |
-| Agent | Run、Step、Tool Trace、Proposal 查询与确认 |
+| Agent | Run/Step/Model/Tool Trace、只读 Replay、取消、Proposal 审批、管理员 Shadow Evaluation |
 | 运维 | `/health/live`、`/health/ready`、`/metrics` |
 
 创建、批量编辑和阶段确认类接口要求 `Idempotency-Key`。异步操作先返回 `202`，客户端通过 `/api/v1/jobs/{job_id}` 查询状态：
 
 - `QUEUED`、`RUNNING`：任务处理中。
+- `RETRY_WAIT`：可恢复错误退避中，客户端继续轮询。
 - `SUCCEEDED`：完成，可读取结果。
 - `WAITING_FOR_REVIEW`：等待人工审核候选内容。
-- `FAILED`：失败，可根据错误码决定是否重试。
+- `FAILED`：不可恢复失败。
+- `DEAD_LETTER`：可恢复错误已耗尽重试，需要运维处理。
+- `CANCELLED`：任务已取消。
 
 ## 本地开发
 
 ### 后端
 
-推荐把 uv 环境和临时目录放到 D 盘：
+项目要求 Python 3.12。推荐把独立 Conda 环境、uv 缓存和临时目录全部放到 D 盘：
 
 ```powershell
-$env:UV_CACHE_DIR='D:\CodexTemp\qianrenqianan\uv-cache'
-$env:UV_PROJECT_ENVIRONMENT='D:\CodexTemp\qianrenqianan\.venv'
-$env:TMP='D:\CodexTemp\qianrenqianan\tmp'
+$projectRuntime='D:\CodexTemp\qianrenqianan-harness'
+conda create --prefix "$projectRuntime\conda-py312" python=3.12 pip -y
+conda activate "$projectRuntime\conda-py312"
+
+$env:UV_CACHE_DIR="$projectRuntime\uv-cache"
+$env:UV_PROJECT_ENVIRONMENT="$projectRuntime\conda-py312"
+$env:UV_PYTHON="$projectRuntime\conda-py312\python.exe"
+$env:TMP="$projectRuntime\tmp"
 $env:TEMP=$env:TMP
 
-uv sync --dev
-uv run uvicorn app.main:app --reload --port 8000
+uv sync --frozen --dev
+python -m uvicorn app.main:app --reload --port 8000
 ```
+
+Docker Desktop 应先在 `Settings → Resources → Advanced → Disk image location` 将虚拟磁盘迁到 D 盘。项目 Compose 卷继续由 `.env` 中的 `DATA_ROOT` 控制。`scripts/build_image.ps1` 使用 D 盘临时上下文，并在构建结束后自动清理；仅调试时使用 `-KeepBuildContext` 保留。
 
 ### 前端
 
@@ -289,6 +316,15 @@ uv run pytest --disable-warnings
 uv run python scripts/run_benchmark.py
 ```
 
+Harness 可靠性集成测试需要真实 PostgreSQL 与 Redis：
+
+```powershell
+docker compose up -d postgres redis
+uv run alembic upgrade head
+$env:RUN_INTEGRATION='1'
+uv run pytest tests/integration --disable-warnings
+```
+
 ### 前端
 
 ```powershell
@@ -308,6 +344,66 @@ npm run build
 - Docker 运行态已验证 API ready、4 个 Worker、Dispatcher、前端资源和章节专项接口。
 
 CI 只使用 `FakeModelGateway`，不会消耗真实模型额度。
+
+企业级 Harness 改造的当前可重复验证结果：
+
+- 60 项后端 Unit/Health 测试通过，覆盖 Budget、Resume 状态、Tool Retry/Ledger、结构化输出、Circuit Breaker、Prompt Injection、Shadow Dry-run 和 Evaluation/Bad Case 回归闭环。
+- 2 项新增 PostgreSQL 17 可靠性集成测试通过，并完成新迁移 `upgrade → downgrade → upgrade` 往返验证。
+- 前端 6 项测试、ESLint、TypeScript 和生产构建通过；Agent benchmark 20 条固定轨迹继续保持 100% 门禁结果。
+- 完整 Compose 镜像和原有 2 项端到端集成测试仍要求本机 Docker Desktop 正常运行；CI 会使用 PostgreSQL/Redis 服务执行。
+
+## Agent Evaluation 与 Bad Case 闭环
+
+完整评测数据默认写入独立的 D 盘中文目录，不占用 C 盘，也不提交学生数据：
+
+```text
+D:\CodexTemp\千人千案评测业务数据
+├─ 数据集
+├─ 评测运行
+├─ 坏案例
+├─ 回归案例
+└─ 对比报告
+```
+
+生成 1000 条业务真实分布的合成 Case 并运行确定性评测：
+
+```powershell
+python scripts/generate_evaluation_dataset.py --count 1000
+python scripts/run_evaluation.py --gateway fake --enforce-thresholds
+```
+
+覆盖范围包括：
+
+- 正常反馈与 Zero-Token 分支；
+- 单异常与多异常组合；
+- Evidence 不足、归属错误和版本过期；
+- Prompt Injection、未知 Tool 与直接修改核心状态；
+- Tool Timeout/Retry、Malformed Output/Repair；
+- 重复动作、无新证据与 A/B 振荡。
+
+每次运行会固定 Dataset Hash、模型、Prompt、Policy 与 Tool Schema 版本，并输出逐 Case Trace、Wilson 95% 置信区间和 Bad Case JSONL/Markdown。失败 Case 可晋升到持久回归集：
+
+```powershell
+python scripts/promote_bad_cases.py '<坏案例.jsonl>'
+python scripts/run_evaluation.py --gateway fake --regression-path `
+  'D:\CodexTemp\千人千案评测业务数据\回归案例\回归案例集.jsonl' `
+  --enforce-thresholds
+```
+
+比较优化前后报告：
+
+```powershell
+python scripts/compare_evaluation_reports.py '<baseline报告.json>' '<candidate报告.json>'
+```
+
+真实千问评测必须显式传入 `--gateway qwen --confirm-real-model`。Fake 指标不能表述为真实模型准确率；不同 Dataset Hash、模型版本或 Case 数的报告不能用于声明 Tool Call/Token 降幅。详细口径和简历证据审计见 `benchmarks/README.md` 与 `benchmarks/RESUME_CLAIMS_AUDIT.md`。
+
+当前 Evaluation v2 已完成：
+
+- 1000 条业务真实分布合成 Case，全量 Fake Harness 门禁 100% 通过；
+- 104 条分层真实 `qwen3.7-plus` 样本：Decision 96.875%、Tool Selection 98.4375%、Task Success 98.0769%；
+- 两条真实 Bad Case 已通过 Evidence 自动绑定和 Tool Schema 压缩修复，并晋升到 14 条 v2 回归集；
+- 单 Case 同模型优化显示 Model Call 4→2、Token 10,152→4,609，但该结果不能外推为全量平均收益。
 
 ## 千问模型
 
@@ -385,6 +481,19 @@ RESOURCE_STORAGE_ROOT=D:/CodexTemp/qianrenqianan/resources
 
 ## 版本说明
 
+### v0.2.0
+
+- 完成 Checkpoint `save/load_latest/resume` 闭环，恢复 `READY`、`TOOL_PENDING`、`FINAL_PENDING` 和终态。
+- 增加 Run Lease、Heartbeat、Fencing Token，阻止过期 Worker 写入 Run、Trace、Checkpoint 和 Tool Ledger。
+- 建立 Tool Error Taxonomy、指数退避/Jitter、幂等执行 Ledger、严格 Pydantic 参数校验与 UNKNOWN 结果协调。
+- 增加模型严格结构化输出、单次 Repair、Flash/Plus Fallback、Circuit Breaker 和调用/Token/时间 Budget。
+- 完善 Proposal `APPLYING/APPLIED/APPLY_FAILED`、Evidence 归属/版本校验、自动 Evidence 绑定和协作式取消。
+- 增加 Job `RETRY_WAIT/DEAD_LETTER`、Reconciliation、Guardrail Audit、Prometheus Worker 指标和 OTel Agent Span。
+- 提供只读 Replay Debugger、动态 Tool 可用性与默认关闭的 Shadow Evaluation。
+- 建立 1000 条 Evaluation v2 业务 Case、真实 Qwen 分层评测、Bad Case 晋升回归和报告对比工具链。
+- 在 104 条分层真实 Qwen 样本中实测 Decision 96.875%、Tool Selection 98.4375%、Task Success 98.0769%，观测高风险修改违规率 0%。
+- 根据真实 Bad Case 优化单 Tool 协议、`completed_tools`、Evidence 自动绑定、Tool Schema 和 Proposal 确定性终态。
+
 ### v0.1.0
 
 - 完成手机号登录、权限隔离、账号删除与会话轮换。
@@ -399,6 +508,9 @@ RESOURCE_STORAGE_ROOT=D:/CodexTemp/qianrenqianan/resources
 
 - Domain 不依赖 FastAPI、SQLAlchemy、Redis、模型 SDK 或 Harness。
 - Agent 只调用读工具和 `propose_*` 工具，不能直接修改掌握度、计划、题库或学生阶段。
+- Proposal 必须绑定归属已验证、带版本快照的 Evidence；证据过期时拒绝应用。
+- `APPROVED` 只代表用户同意，重大调整必须经过 `APPLYING → APPLIED/APPLY_FAILED` 才算业务完成。
+- Replay Debugger 只读取持久化轨迹；Shadow Evaluation 使用 Dry-run Tool Registry，禁止执行任何业务副作用。
 - Redis 只负责投递，`background_jobs` 和 `domain_events` 是任务事实源。
 - 真题、普通练习和模拟卷分别存储，只在 Student Model 聚合。
 - AI 生成内容必须经过 Reviewer/Admin 审核，不存在自动发布后门。

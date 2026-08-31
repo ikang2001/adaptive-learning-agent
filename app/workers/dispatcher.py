@@ -22,7 +22,7 @@ async def dispatch_once() -> int:
                     await session.scalars(
                         select(BackgroundJob)
                         .where(
-                            BackgroundJob.status == JobStatus.QUEUED,
+                            BackgroundJob.status.in_([JobStatus.QUEUED, JobStatus.RETRY_WAIT]),
                             BackgroundJob.available_at <= datetime.now(UTC),
                             BackgroundJob.dispatched_at.is_(None),
                         )
@@ -33,7 +33,8 @@ async def dispatch_once() -> int:
                 ).all()
             )
             for job in jobs:
-                await redis.enqueue_job("execute_job", str(job.id), _job_id=str(job.id))
+                delivery_id = f"{job.id}:{job.attempt_count + 1}"
+                await redis.enqueue_job("execute_job", str(job.id), _job_id=delivery_id)
                 job.dispatched_at = datetime.now(UTC)
             await session.commit()
             return len(jobs)

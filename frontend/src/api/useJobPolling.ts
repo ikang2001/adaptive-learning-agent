@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from './client'
 import type { BackgroundJob } from './types'
 
-const terminalStatuses = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'WAITING_FOR_REVIEW'])
+const terminalStatuses = new Set(['SUCCEEDED', 'FAILED', 'DEAD_LETTER', 'CANCELLED', 'WAITING_FOR_REVIEW'])
 
 export function useJobPolling(jobId: string | null) {
   return useQuery({

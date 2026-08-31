@@ -51,7 +51,7 @@ export function SetupPage() {
       for (let attempt = 0; attempt < 30; attempt += 1) {
         const state = await apiRequest<BackgroundJob>(`/jobs/${job.id}`)
         if (state.status === 'SUCCEEDED') break
-        if (state.status === 'FAILED') throw new Error(`计划生成失败：${state.error_code ?? 'UNKNOWN'}`)
+        if (state.status === 'FAILED' || state.status === 'DEAD_LETTER') throw new Error(`计划生成失败：${state.error_code ?? 'UNKNOWN'}`)
         await new Promise((resolve) => window.setTimeout(resolve, 400))
       }
       return profile

@@ -9,3 +9,9 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["api:8000"]
+  - job_name: learning-agent-worker
+    dns_sd_configs:
+      - names: ["worker"]
+        type: A
+        port: 9101
+        refresh_interval: 15s

@@ -6,9 +6,20 @@ from pathlib import Path
 from typing import Any
 
 from app.harness.contracts import RuntimeState
-from app.harness.fakes import MemoryCheckpointStore, MemoryTraceRecorder
+from app.harness.fakes import (
+    MemoryCheckpointStore,
+    MemoryToolExecutionLedger,
+    MemoryTraceRecorder,
+)
 from app.harness.runner import AgentRunner
-from app.harness.tools import PolicyGuard, ToolDefinition, ToolExecutor, ToolRegistry, ToolRisk
+from app.harness.tools import (
+    PolicyGuard,
+    ToolDefinition,
+    ToolExecutor,
+    ToolRegistry,
+    ToolRisk,
+    ToolSideEffect,
+)
 from app.infrastructure.adapters.model_gateway import FakeDiagnosisModelGateway
 
 
@@ -32,12 +43,14 @@ async def run_case(case: dict[str, Any]) -> tuple[bool, bool]:
                 {"type": "object"},
                 proposal,
                 risk=ToolRisk.PROPOSAL,
+                side_effect_level=ToolSideEffect.IDEMPOTENT_WRITE,
+                idempotency_required=True,
             )
         )
     runner = AgentRunner(
         FakeDiagnosisModelGateway(),
         registry,
-        ToolExecutor(registry, PolicyGuard()),
+        ToolExecutor(registry, PolicyGuard(), ledger=MemoryToolExecutionLedger()),
         MemoryCheckpointStore(),
         MemoryTraceRecorder(),
     )
