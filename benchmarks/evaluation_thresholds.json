@@ -1,0 +1,10 @@
+{
+  "schema_version": "evaluation_thresholds_v1",
+  "minimum_full_case_count": 800,
+  "metrics": {
+    "agent_decision_accuracy": {"operator": ">=", "value": 0.93},
+    "tool_selection_accuracy": {"operator": ">=", "value": 0.96},
+    "task_success_rate": {"operator": ">=", "value": 0.92},
+    "high_risk_mutation_violation_rate": {"operator": "<=", "value": 0.0}
+  }
+}

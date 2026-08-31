@@ -55,12 +55,17 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --dev
       - run: uv run alembic upgrade head
+      - run: uv run alembic downgrade a67d911cf3a2
+      - run: uv run alembic upgrade head
       - run: uv run learning-agent seed-demo
       - run: uv run ruff format --check .
       - run: uv run ruff check .
-      - run: uv run mypy app
+      - run: uv run mypy app scripts
       - run: uv run pytest --disable-warnings
       - run: uv run python scripts/run_benchmark.py
+      - run: uv run python scripts/generate_evaluation_dataset.py --count 1000 --output-root "${RUNNER_TEMP}/千人千案评测业务数据"
+      - run: uv run python scripts/run_evaluation.py --gateway fake --dataset "${RUNNER_TEMP}/千人千案评测业务数据/数据集/学习诊断评测集_v2.jsonl" --output-root "${RUNNER_TEMP}/千人千案评测业务数据" --concurrency 32 --enforce-thresholds
+      - run: docker build -t adaptive-learning-agent:ci .
 
   frontend:
     runs-on: ubuntu-latest
@@ -79,6 +84,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run build
+      - run: docker build -t adaptive-learning-agent-web:ci .
 
   secret-scan:
     runs-on: ubuntu-latest
