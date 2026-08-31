@@ -73,7 +73,7 @@ jobs:
       - name: Build backend Docker image with retry
         run: |
           for attempt in 1 2 3; do
-            if docker build -t adaptive-learning-agent:ci .; then
+            if DOCKER_BUILDKIT=0 docker build -t adaptive-learning-agent:ci .; then
               exit 0
             fi
             if [ "$attempt" -lt 3 ]; then
