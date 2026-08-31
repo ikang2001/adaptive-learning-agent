@@ -19,6 +19,7 @@ from app.application.plans import PlanQueryService
 from app.application.practice import PracticeService
 from app.application.resources import ResourceService
 from app.application.school_change import SchoolChangeService
+from app.application.shadow_evaluations import ShadowEvaluationService
 from app.application.students import StudentService
 from app.application.true_exams import TrueExamService
 from app.application.unlocks import UnlockService
@@ -128,6 +129,13 @@ def get_proposal_service(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ProposalService:
     return ProposalService(session)
+
+
+def get_shadow_evaluation_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ShadowEvaluationService:
+    return ShadowEvaluationService(session, settings)
 
 
 def get_true_exam_service(

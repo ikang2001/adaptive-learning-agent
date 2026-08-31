@@ -6,6 +6,7 @@ describe('Mock Planner job state', () => {
     expect(isMockJobRunning(undefined)).toBe(true)
     expect(isMockJobRunning('QUEUED')).toBe(true)
     expect(isMockJobRunning('RUNNING')).toBe(true)
+    expect(isMockJobRunning('RETRY_WAIT')).toBe(true)
     expect(isMockJobRunning('SUCCEEDED')).toBe(false)
     expect(isMockJobRunning('WAITING_FOR_REVIEW')).toBe(false)
     expect(isMockJobRunning('FAILED')).toBe(false)

@@ -98,7 +98,7 @@ export function MockExamsPage() {
       {mockType === 'FULL' && !allStrengthened ? <ErrorState message="全部考纲知识点确认强化完成后，才可生成院校全真模拟卷。" /> : null}
       {mockType === 'FULL' && allStrengthened && !fullUnlocked ? <Panel className="job-banner"><div><strong>已满足全真模拟条件</strong><p>Agent 建议进入全真模拟阶段，确认后开放组卷。</p></div><Button busy={confirmFull.isPending} onClick={() => confirmFull.mutate()}>确认进入全真模拟</Button></Panel> : null}
       {create.error ? <ErrorState message={create.error instanceof ApiError ? create.error.message : '组卷没有完成'} /> : null}
-      {job.data?.status === 'FAILED' ? <ErrorState message={`组卷任务失败：${job.data.error_code ?? 'UNKNOWN_ERROR'}`} /> : null}
+      {job.data && ['FAILED', 'DEAD_LETTER'].includes(job.data.status) ? <ErrorState message={`组卷任务失败：${job.data.error_code ?? 'UNKNOWN_ERROR'}`} /> : null}
       {jobId && isMockJobRunning(job.data?.status) ? <Panel className="job-banner"><LoaderCircle className="spin" /><div><strong>Mock Planner 正在求解约束</strong><p>{job.data?.status ?? 'QUEUED'} · 题型、考点、难度与个人弱点同时计算</p></div></Panel> : null}
       {mock.isLoading ? <LoadingState label="读取模拟卷" /> : null}
       {mock.data?.status === 'WAITING_FOR_REVIEW' ? <EmptyState title="候选题正在等待审核" description="现有题库不足以满足这份卷子的结构约束。AI 候选题不会自动发布，Reviewer 审核后会自动续跑组卷。" /> : null}

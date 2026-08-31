@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.domain.enums import JobStatus
 from app.errors import AppError
 from app.infrastructure.db.models import BackgroundJob, DomainEvent
@@ -49,6 +50,9 @@ class JobService:
             payload=payload,
             idempotency_key=idempotency_key,
             available_at=datetime.now(UTC),
+            attempt_count=0,
+            max_attempts=get_settings().job_max_attempts,
+            next_retry_at=None,
         )
         self._session.add(job)
         await self._session.flush()

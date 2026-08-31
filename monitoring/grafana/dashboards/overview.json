@@ -20,6 +20,41 @@
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "targets": [{"expr": "histogram_quantile(0.95, sum(rate(learning_agent_http_request_duration_seconds_bucket[5m])) by (le))", "refId": "A"}],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Agent runs by termination reason",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "sum(rate(learning_agent_agent_runs_total[5m])) by (termination_reason)", "legendFormat": "{{termination_reason}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Model P95 latency",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(learning_agent_model_call_duration_seconds_bucket[5m])) by (le, model))", "legendFormat": "{{model}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Tool retries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "sum(rate(learning_agent_tool_retries_total[5m])) by (tool)", "legendFormat": "{{tool}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Job retry and dead letter events",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "sum(rate(learning_agent_job_retry_total[5m])) by (job_type)", "legendFormat": "retry {{job_type}}", "refId": "A"},
+        {"expr": "sum(rate(learning_agent_dead_letter_total[5m])) by (job_type)", "legendFormat": "dead letter {{job_type}}", "refId": "B"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
     }
   ]
 }

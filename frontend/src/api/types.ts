@@ -49,11 +49,15 @@ export type AvailabilityItem = {
 export type BackgroundJob = {
   id: string
   job_type: string
-  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'WAITING_FOR_REVIEW'
+  status: 'QUEUED' | 'RUNNING' | 'RETRY_WAIT' | 'SUCCEEDED' | 'FAILED' | 'DEAD_LETTER' | 'CANCELLED' | 'WAITING_FOR_REVIEW'
   result: Record<string, unknown> | null
   error_code: string | null
   created_at: string
   finished_at: string | null
+  attempt_count: number
+  max_attempts: number
+  next_retry_at: string | null
+  dead_lettered_at: string | null
 }
 
 export type PlanTask = {
@@ -224,6 +228,12 @@ export type Proposal = {
   reason_codes: string[]
   confidence: number
   evidence_refs: string[]
+  evidence_snapshot: Array<Record<string, unknown>>
+  approval_expires_at: string | null
+  reviewer_user_id: string | null
+  review_reason: string | null
+  applied_at: string | null
+  apply_error_code: string | null
 }
 
 export type AgentRun = {
@@ -234,7 +244,11 @@ export type AgentRun = {
   prompt_version: string
   policy_version: string
   loop_count: number
+  model_call_count: number
   tool_call_count: number
+  input_tokens: number
+  output_tokens: number
+  resumed_count: number
   termination_reason: string | null
   steps: Array<{
     step_number: number
@@ -250,9 +264,67 @@ export type AgentRun = {
     tool_version: string
     status: string
     latency_ms: number
+    retry_count: number
+    error_code: string | null
+    replayed: boolean
     created_at: string
   }>
   proposals: Proposal[]
+}
+
+export type AgentReplay = {
+  run_id: string
+  status: string
+  termination_reason: string | null
+  read_only: true
+  side_effects_executed: false
+  timeline: Array<{
+    step_number: number
+    action: Record<string, unknown>
+    model_attempts: Array<{
+      attempt_number: number
+      purpose: string
+      model_name: string
+      status: string
+      input_tokens: number
+      output_tokens: number
+      latency_ms: number
+      error_code: string | null
+    }>
+    tool: null | {
+      name: string
+      status: string
+      retry_count: number
+      error_code: string | null
+      replayed: boolean
+      observation: string | null
+    }
+    guardrails: Array<{ decision: string; reason_code: string; tool_name: string | null }>
+    checkpoint: null | {
+      version: number
+      state_hash: string
+      resume_safe: boolean
+      fencing_token: number
+    }
+  }>
+  proposal_ids: string[]
+}
+
+export type ShadowEvaluation = {
+  id: string
+  source_run_id: string
+  job_id: string | null
+  status: string
+  baseline_model: string
+  baseline_prompt_version: string
+  baseline_decision: string | null
+  baseline_confidence: number | null
+  candidate_model: string
+  candidate_prompt_version: string
+  candidate_decision: string | null
+  candidate_confidence: number | null
+  comparison: Record<string, unknown> | null
+  error_code: string | null
 }
 
 export type TrueExam = {

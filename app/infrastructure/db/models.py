@@ -898,6 +898,10 @@ class BackgroundJob(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AgentRun(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
@@ -917,10 +921,18 @@ class AgentRun(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     prompt_version: Mapped[str] = mapped_column(String(32))
     policy_version: Mapped[str] = mapped_column(String(32))
     loop_count: Mapped[int] = mapped_column(Integer, default=0)
+    model_call_count: Mapped[int] = mapped_column(Integer, default=0)
     tool_call_count: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    resumed_count: Mapped[int] = mapped_column(Integer, default=0)
     termination_reason: Mapped[str | None] = mapped_column(String(64))
     lease_owner: Mapped[str | None] = mapped_column(String(128))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fencing_token: Mapped[int] = mapped_column(Integer, default=0)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AgentStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -937,10 +949,41 @@ class AgentStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    prompt_version: Mapped[str] = mapped_column(String(32), default="unknown")
+    policy_version: Mapped[str] = mapped_column(String(32), default="unknown")
+    action_type: Mapped[str] = mapped_column(String(32), default="UNKNOWN")
+    decision: Mapped[str | None] = mapped_column(String(64))
+    confidence: Mapped[float] = mapped_column(Float, default=0)
+    reason_codes: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    stall_reason: Mapped[str | None] = mapped_column(String(64))
+
+
+class ModelInvocation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "model_invocations"
+    __table_args__ = (
+        UniqueConstraint("step_id", "attempt_number", name="uq_model_invocation_attempt"),
+    )
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), index=True
+    )
+    step_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_steps.id", ondelete="CASCADE"), index=True
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer)
+    purpose: Mapped[str] = mapped_column(String(32))
+    model_name: Mapped[str] = mapped_column(String(96))
+    status: Mapped[str] = mapped_column(String(32))
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    response_action: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
 
 class ToolInvocation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tool_invocations"
+    __table_args__ = (UniqueConstraint("run_id", "step_id", name="uq_tool_invocation_step"),)
 
     run_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), index=True
@@ -953,6 +996,10 @@ class ToolInvocation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32))
     latency_ms: Mapped[int] = mapped_column(Integer)
     idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    risk: Mapped[str] = mapped_column(String(32), default="READ")
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    replayed: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Checkpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -964,6 +1011,49 @@ class Checkpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     step_number: Mapped[int] = mapped_column(Integer)
     state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    checkpoint_version: Mapped[int] = mapped_column(Integer, default=2)
+    state_hash: Mapped[str] = mapped_column(String(64))
+    resume_safe: Mapped[bool] = mapped_column(Boolean, default=True)
+    fencing_token: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ToolExecutionRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "tool_execution_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id", "tool_name", "idempotency_key", name="uq_tool_execution_idempotency"
+        ),
+    )
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), index=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(96))
+    tool_version: Mapped[str] = mapped_column(String(32))
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    args_digest: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(32))
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    result_digest: Mapped[str | None] = mapped_column(String(64))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fencing_token: Mapped[int] = mapped_column(Integer)
+
+
+class GuardrailEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "guardrail_events"
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), index=True
+    )
+    step_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_steps.id", ondelete="SET NULL")
+    )
+    tool_name: Mapped[str | None] = mapped_column(String(96))
+    policy_version: Mapped[str] = mapped_column(String(32))
+    decision: Mapped[str] = mapped_column(String(32))
+    reason_code: Mapped[str] = mapped_column(String(64))
 
 
 class Proposal(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
@@ -986,8 +1076,43 @@ class Proposal(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     reason_codes: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     confidence: Mapped[float] = mapped_column(Float)
     evidence_refs: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    evidence_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     idempotency_key: Mapped[str] = mapped_column(String(128))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approval_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewer_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    review_reason: Mapped[str | None] = mapped_column(Text)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    apply_error_code: Mapped[str | None] = mapped_column(String(64))
+
+
+class ShadowEvaluation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "shadow_evaluations"
+
+    source_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), index=True
+    )
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("background_jobs.id", ondelete="SET NULL"), unique=True
+    )
+    status: Mapped[str] = mapped_column(String(32), default="QUEUED")
+    baseline_model: Mapped[str] = mapped_column(String(96))
+    baseline_prompt_version: Mapped[str] = mapped_column(String(32))
+    baseline_decision: Mapped[str | None] = mapped_column(String(64))
+    baseline_confidence: Mapped[float | None] = mapped_column(Float)
+    candidate_model: Mapped[str] = mapped_column(String(96))
+    candidate_prompt_version: Mapped[str] = mapped_column(String(32))
+    candidate_decision: Mapped[str | None] = mapped_column(String(64))
+    candidate_confidence: Mapped[float | None] = mapped_column(Float)
+    comparison: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class DomainEvent(UUIDPrimaryKeyMixin, Base):

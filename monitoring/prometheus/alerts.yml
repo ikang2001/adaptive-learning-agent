@@ -22,4 +22,29 @@ groups:
           severity: warning
         annotations:
           summary: Non-model API P95 latency is above 300ms
+      - alert: LearningAgentDeadLetterDetected
+        expr: increase(learning_agent_dead_letter_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: One or more background jobs entered the dead letter state
+      - alert: LearningAgentModelFailureRate
+        expr: >-
+          sum(rate(learning_agent_model_calls_total{status="FAILED"}[10m]))
+          /
+          clamp_min(sum(rate(learning_agent_model_calls_total[10m])), 0.001)
+          > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Agent model failure rate is above 10%
+      - alert: LearningAgentLoopStallDetected
+        expr: increase(learning_agent_loop_stalled_total[15m]) > 2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Multiple Agent runs stalled in the last 15 minutes
 
