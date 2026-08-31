@@ -65,6 +65,11 @@ jobs:
       - run: uv run python scripts/run_benchmark.py
       - run: uv run python scripts/generate_evaluation_dataset.py --count 1000 --output-root "${RUNNER_TEMP}/千人千案评测业务数据"
       - run: uv run python scripts/run_evaluation.py --gateway fake --dataset "${RUNNER_TEMP}/千人千案评测业务数据/数据集/学习诊断评测集_v2.jsonl" --output-root "${RUNNER_TEMP}/千人千案评测业务数据" --concurrency 32 --enforce-thresholds
+  backend-image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
       - name: Build backend Docker image with retry
         run: |
           for attempt in 1 2 3; do
