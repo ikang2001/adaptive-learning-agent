@@ -65,7 +65,17 @@ jobs:
       - run: uv run python scripts/run_benchmark.py
       - run: uv run python scripts/generate_evaluation_dataset.py --count 1000 --output-root "${RUNNER_TEMP}/千人千案评测业务数据"
       - run: uv run python scripts/run_evaluation.py --gateway fake --dataset "${RUNNER_TEMP}/千人千案评测业务数据/数据集/学习诊断评测集_v2.jsonl" --output-root "${RUNNER_TEMP}/千人千案评测业务数据" --concurrency 32 --enforce-thresholds
-      - run: docker build -t adaptive-learning-agent:ci .
+      - name: Build backend Docker image with retry
+        run: |
+          for attempt in 1 2 3; do
+            if docker build -t adaptive-learning-agent:ci .; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 10))
+            fi
+          done
+          exit 1
 
   frontend:
     runs-on: ubuntu-latest
@@ -84,7 +94,17 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run build
-      - run: docker build -t adaptive-learning-agent-web:ci .
+      - name: Build frontend Docker image with retry
+        run: |
+          for attempt in 1 2 3; do
+            if docker build -t adaptive-learning-agent-web:ci .; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 10))
+            fi
+          done
+          exit 1
 
   secret-scan:
     runs-on: ubuntu-latest
